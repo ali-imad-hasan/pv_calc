@@ -17,8 +17,8 @@ kappa   = 0.287514
 dlatlon = 1.125
 l       = 0             # used to name files
 #filename = '/home/ords/aq/alh002/pyscripts/workdir/momentum_test.fst'
-strato_file = '/home/ords/aq/alh002/pyscripts/workdir/strato_coords.txt'
-tropo_file = '/home/ords/aq/alh002/pyscripts/workdir/tropo_coords.txt'
+strato_file = '/home/ords/aq/alh002/pyscripts/workdir/pv_files/strato_coords.txt'
+tropo_file = '/home/ords/aq/alh002/pyscripts/workdir/pv_files/tropo_coords.txt'
 filenames  = ['/home/ords/aq/alh002/NCDF/testmom.nc']
 lnsp_files = ["/home/ords/aq/alh002/NCDF/LNSP/2008.nc", 
               "/home/ords/aq/alh002/NCDF/LNSP/2009.nc", 
@@ -103,8 +103,8 @@ def build_fst(params):
     day = time.gmtime()
     temp = '' 
     for x in day: temp += str(x)
-    #new_nc = '/home/ords/aq/alh002/pyscripts/workdir/TEST5.fst'
-    new_nc = '/home/ords/aq/alh002/pyscripts/workdir/POTVOR_file_{0}.fst'.format(temp)
+    #new_nc = '/home/ords/aq/alh002/pyscripts/workdir/pv_files/TEST5.fst'
+    new_nc = '/home/ords/aq/alh002/pyscripts/workdir/pv_files/POTVOR_file_{0}.fst'.format(temp)
     tmp = open(new_nc, 'w+'); tmp.close()
     output_file = new_nc
 
@@ -288,7 +288,7 @@ def get_pressures(open_nc, m_int):
 #    print pressure[15, :, 12, 23]
 #    print pressure[45, :, 12, 53]
 #    print pressure[75, :, 2, 39]
-    print full_pressure[23, :, 12, 23]
+#    print full_pressure[23, :, 12, 23]
     print "That took " + str(time.time() - start_time) + " seconds"
     return full_pressure 
 
@@ -350,8 +350,8 @@ for filename in filenames:
     cosphi[-1] = cosphi[-2]
     f0_p   = 2 * np.pi/86400. * np.sin(lat * np.pi/180.)
     for t in xrange(len(qq)): 
-        for x in xrange(len(qq[0,0,0])):
-            for k in xrange(len(qq[0])):
+        for x in xrange(ni):
+            for k in xrange(nk_mom):
                 qq[t,k,:,x] = f0_p + qq[t,k,:,x]
     dx     = np.zeros([nj, ni])  # shape is lon, lat
     dy     = np.zeros([nj, ni])
@@ -451,25 +451,6 @@ for filename in filenames:
                     dthdx[:,i] = ((th[t,k,:,i+1] - th[t,k,:,i-1])/ dx[:,i]) / 2.
                 dthdx[:,-1] = (th[t,k,:,-1] - th[t,k,:,-2]) / dx[:,-1] # last dthdy level
                 
-                # calculation of qq from dvdx and dudy
-                dvdx[:,0]  = (vv[t,k,:,1] - vv[t,k,:,0]) / dx[:,0]
-                for i in xrange(1, ni-1):
-                    dvdx[:,i] = ((vv[t,k,:,i+1] - vv[t,k,:,i-1]) / dx[:,i]) / 2.
-                dvdx[:,-1] = (vv[t,k,:,-1] - vv[t,k,:,-2]) / dx[:,-1]
-
-                try:
-                    dudy[0,:]   = ((uu[t,k,1,:] * cosphi[1]) - (uu[t,k,0,:] * cosphi[0])) / dy[0,:]
-                    for j in xrange(1, nj-1):
-                        dudy[j,:] = (((uu[t,k,j+1,:] * cosphi[j+1]) - (uu[t,k,j-1,:] * cosphi[j-1])) / dy[j,:])/2.
-                    dudy[-1,:]  = ((uu[t,k,-2,:] * cosphi[-2]) - (uu[t,k,-1,:] * cosphi[-1])) / dy[-1,:]
-                    print dudy.shape
-                except:
-                    raise
-
-                for i in xrange(ni):
-                    qq2[k, :, i] = f0_p + dvdx[:,i] - dudy[:,i]/cosphi 
-                #qq2 = f0_p + dvdx - dudy/cosphi
-
             else:
                 print "FINAL LEVEL REACHED"
                 # final level (k = nk)
@@ -483,19 +464,6 @@ for filename in filenames:
                 for i in xrange(1, ni-1):
                     dthdx[:,i] = ((th[t,k,:,i+1] - th[t,k,:,i-1]) / dx[:,i])/2
 
-                # do calculations for obtaining qq
-                dudy[0,:]   = (uu[t,k,1,:] * cosphi[1] - uu[t,k,0,:] * cosphi[1]) / dy[0,:]
-                for j in xrange(1, nj-1):
-                    dudy[j,:] = ((uu[t,k,j+1,:] * cosphi[j+1] - uu[t,k,j-1,:] * cosphi[j-1]) / dy[j,:])/2.
-                dudy[-1,:]  =  (uu[t,k,-1,:] * cosphi[-1] - uu[t,k,-2,:] * cosphi[-2]) / dy[-1,:]
-                dvdx[:,0]  = (vv[t,k,:,1] - vv[t,k,:,0]) / dx[:,0]
-                for i in xrange(1, ni-1):
-                    dvdx[:,i] = (((vv[t,k,:,i+1] - vv[t,k,:,i-1]) / dx[:,i]))/2
-                dvdx[:,-1] = (vv[t,k,:,-1] - vv[t,k,:,-2]) / dx[:,-1]
-                for i in xrange(ni):
-                    qq2[k, :, i] = f0_p + dvdx[:,i] - dudy[:,i]/cosphi 
-                #qq2 = f0_p + dvdx - dudy/cosphi
-                
             '''
             from this point onwards, horizontal grid leapfrogging is complete.
             the next steps performed are going to be vertical integration of the terms
@@ -506,7 +474,6 @@ for filename in filenames:
             two levels. 
             '''
             
-            # PV = g * dthdk * qq + term1 - term2.
             # PV values are on fields k-1/2 respective to the values obtained
             if k != 0:
                 term1[k]    = g0 * ((vv[t,k] - vv[t,k-1])/dp[k]) * dthdx
@@ -515,24 +482,20 @@ for filename in filenames:
         
         # these exist on half levels -0.5 of the original level
         PV      = ((-g0 * (dt/dp) * tempq) + term1 - term2) * 1e6
-        PV2     = ((-g0 * (dt/dp) * qq2) + term1 - term2) * 1e6
         #PV      = qq[t]
 
         PV  = np.transpose(PV, (0,2,1))
-        PV2 = np.transpose(PV2, (0,2,1))
         PV  = shift_lon(PV)
         bin_coords(PV)
-        #strato_timed_bin_list[t], tropo_timed_bin_list[t] = bin_coords(PV)
         PV  = vert_interp(pressures[t], PV)
-        PV2 = shift_lon(PV2)
-        PV2 = vert_interp(pressures[t], PV2)
         zonal_mean = get_zonal_mean(PV)  # change PV/PV2 depending on which you choose to use
-        pv_list.append(PV)#, PV2]
+
+        pv_list.append(PV)
         zon_list.append(zonal_mean)
         
-        # BOOKMARK: FSTFILE #
-        
-        ## this portion of the code simply opens a new file and ports PV onto it
+    # BOOKMARK: FSTFILE #
+    
+    ## this portion of the code simply opens a new file and ports PV onto it
     print "Total time taken: {0}".format(str(time.time() - start_time))
     #exit()
     l += 1
@@ -546,10 +509,11 @@ for filename in filenames:
                 ip1 = rmn.convertIp(rmn.CONVIP_ENCODE, const_pressure[rp1], rmn.KIND_PRESSURE)
                 new_record.update(MACC_grid)
                 new_record.update({  # Update with specific meta
-                    'nomvar': 'PV' + str(t),
+                    'nomvar': 'PV',
                     'typvar': 'C', 
                     'etiket': 'MACCRean',
                     #TODO: ip2 for timestep
+                    'ip2'   : t,
                     'ni'    : MACC_grid['ni'],
                     'nj'    : MACC_grid['nj'],
                     'ig1'   : tic_record['ip1'],
@@ -557,7 +521,7 @@ for filename in filenames:
                     'ig3'   : tic_record['ip3'],
                     'ig4'   : tic_record['ig4'],
                     'dateo' : rmn.newdate(rmn.NEWDATE_PRINT2STAMP,20120100 + int(math.floor(t/4+1)), time_int),
-                    'deet'  : 0,  # timestep in secs
+                    'deet'  : int(86400/4),  # timestep in secs
                     'ip1'   : ip1
                     })
                 
@@ -574,7 +538,7 @@ for filename in filenames:
                 tmp = np.asfortranarray(tmp)
                 zonal_record = new_record
                 zonal_record.update({
-                    'nomvar': 'ZO' + str(t),
+                    'nomvar': 'ZO',
                     'd'     : tmp.astype(np.float32)
                     })
                 print "Defined a zonal mean record with dimensions ({0}, {1})".format(new_record['ni'], new_record['nj'])       

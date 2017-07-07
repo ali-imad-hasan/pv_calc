@@ -28,6 +28,40 @@ lnsp_files = ["/home/ords/aq/alh002/NCDF/LNSP/2008.nc",
 lnsp_files = [lnsp_files[1]]  # this is temporary, just to work with one file
 
 ##### FXN #####
+def calc_qq(uu, vv, dx, dy, cosphi):
+    '''
+    calculates qq from u component of wind, v component of wind, dx, dy, and cosphi.
+
+    uu/vv should be 4d arrays, dx/dy/cosphi should be 2d in the form nj, ni.
+
+    returns 2d array in shape nj,ni
+    '''
+
+    # dvdx/dudy are calculated through leapfrogging technique
+    dvdx = np.zeros((nj,ni))
+    dudy = np.zeros((nj,ni))
+    qq   = np.zeros((nj,ni))
+
+    # calculation of qq from dvdx and dudy
+    dvdx[:,0]  = (vv[t,k,:,1] - vv[t,k,:,0]) / dx[:,0]
+    for i in xrange(1, ni-1):
+        dvdx[:,i] = ((vv[t,k,:,i+1] - vv[t,k,:,i-1]) / dx[:,i]) / 2.
+    dvdx[:,-1] = (vv[t,k,:,-1] - vv[t,k,:,-2]) / dx[:,-1]
+
+    try:
+        dudy[0,:]   = ((uu[t,k,1,:] * cosphi[1]) - (uu[t,k,0,:] * cosphi[0])) / dy[0,:]
+        for j in xrange(1, nj-1):
+            dudy[j,:] = (((uu[t,k,j+1,:] * cosphi[j+1]) - (uu[t,k,j-1,:] * cosphi[j-1])) / dy[j,:])/2.
+        dudy[-1,:]  = ((uu[t,k,-2,:] * cosphi[-2]) - (uu[t,k,-1,:] * cosphi[-1])) / dy[-1,:]
+    except:
+        raise
+
+    for i in xrange(ni):
+        qq[:, i] = f0_p + dvdx[:,i] - dudy[:,i]/cosphi 
+
+    return qq
+
+
 def bin_coords(PV_array):
     '''
     bins coords based on if they are stratospheric or tropospheric relative to 
@@ -314,10 +348,6 @@ for filename in filenames:
     nk_thm = nk_mom
     qq2 = np.zeros((nk_mom, nj, ni))
 
-    # stuff on level k (uu and vv will be on this level)
-    dvdx = np.zeros([nj, ni])
-    dudy = np.zeros([nj, ni])
-
     # stuff on level k - 1
     uulast = np.zeros([nj, ni])
     vvlast = np.zeros([nj, ni])
@@ -398,7 +428,6 @@ for filename in filenames:
     #for t in xrange(1):
         # Potential vorticity field
         PV          = np.zeros([nk_mom, nj, ni])
-        PV2         = np.zeros(PV.shape)
         pres_levs   = np.zeros(PV.shape)  # really lazy
         dp          = np.zeros(PV.shape)  # really lazy
 
@@ -466,13 +495,12 @@ for filename in filenames:
         
         # these exist on half levels -0.5 of the original level
         PV      = ((-g0 * (dt/dp) * tempq) + term1 - term2) * 1e6
-        #PV      = qq[t]
 
         PV  = np.transpose(PV, (0,2,1))
         PV  = shift_lon(PV)
         bin_coords(PV)
         PV  = vert_interp(pressures[t], PV)
-        zonal_mean = get_zonal_mean(PV)  # change PV/PV2 depending on which you choose to use
+        zonal_mean = get_zonal_mean(PV)  # change PV depending on which you choose to use
 
         pv_list.append(PV)
         zon_list.append(zonal_mean)
@@ -496,7 +524,6 @@ for filename in filenames:
                     'nomvar': 'PV',
                     'typvar': 'C', 
                     'etiket': 'MACCRean',
-                    #TODO: ip2 for timestep
                     'ip2'   : t,
                     'ni'    : MACC_grid['ni'],
                     'nj'    : MACC_grid['nj'],

@@ -28,22 +28,6 @@ lnsp_files = ["/home/ords/aq/alh002/NCDF/LNSP/2008.nc",
 lnsp_files = [lnsp_files[1]]  # this is temporary, just to work with one file
 
 ##### FXN #####
-def monotone(lst):
-    '''
-    i took this function off of stack overflow
-    (https://stackoverflow.com/questions/4983258/python-how-to-check-list-monotonicity)
-    '''
-    def monotone_increasing(lst):
-        pairs = zip(lst, lst[1:])
-        return all(itertools.starmap(operator.le, pairs))
-
-    def monotone_decreasing(lst):
-        pairs = zip(lst, lst[1:])
-        return all(itertools.starmap(operator.ge, pairs))
-
-    return monotone_increasing(lst) or monotone_decreasing(lst)
-
-
 def bin_coords(PV_array):
     '''
     bins coords based on if they are stratospheric or tropospheric relative to 

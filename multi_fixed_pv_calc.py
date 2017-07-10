@@ -62,7 +62,7 @@ def calc_qq(uu, vv, dx, dy, cosphi):
     return qq
 
 
-def bin_coords(PV_array):
+def bin_coords(PV_array, timestep):
     '''
     bins coords based on if they are stratospheric or tropospheric relative to 
     if PV value is > 2
@@ -86,6 +86,8 @@ def bin_coords(PV_array):
     # creates file
     strato  = open(strato_file,'a')
     tropo   = open(tropo_file,'a')
+    strato.write("TIMESTEP,{0}\n".format(timestep))
+    tropo.write("TIMESTEP,{0}\n".format(timestep))
 
     for i in xrange(ni):
         for j in xrange(nj):
@@ -104,6 +106,8 @@ def bin_coords(PV_array):
     for coord in strato_coords:
         strato.write('{0},{1},{2}\n'.format(coord[0], coord[1], coord[2]))
     print 'DONE WRITING'
+    strato.close()
+    tropo.close()
 
     print "Binning time: {0}".format(str(time.time() - start_time))
     #return strato_coords, tropo_coords
@@ -498,7 +502,7 @@ for filename in filenames:
 
         PV  = np.transpose(PV, (0,2,1))
         PV  = shift_lon(PV)
-        bin_coords(PV)
+        bin_coords(PV,t)
         PV  = vert_interp(pressures[t], PV)
         zonal_mean = get_zonal_mean(PV)  # change PV depending on which you choose to use
 

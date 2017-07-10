@@ -26,10 +26,11 @@ def build_data(species, ni, nj, nk, timesteps):
     tropos = np.zeros((timesteps, nk, ni, nj))
     i = 0
     
-    # TODO: this should be a 4d array of shape (timestep, level, lat, lon)
-    # this is currently a temporary workaround
+    # reads nc file to retrieve data.
+    # you may need to call splice_month in pv_calc.py if you're not dealing with january.
     species_data = pyg.open('/space/hall1/sitestore/eccc/aq/r1/alh002/NCDF/SPECIES/GO3/2009.nc')
-    species_data = species_data.go3[:28,::-1]
+    # flips levels so it's compatible with the data in tropo file
+    species_data = species_data.go3[:timesteps,::-1]
 
     with open(pv_file_dir + '/tropo_coords.txt', 'r') as tropo_file:
         for line in tropo_file:
@@ -42,12 +43,10 @@ def build_data(species, ni, nj, nk, timesteps):
             coordinate = [int(x) for x in line[:-1].split(',')]  # creates a list with 3 ints [nk,ni,nj]
             for ind in coordinate:
                 tropos[timestep, coordinate[0],coordinate[1],coordinate[2]] = species_data[timestep, coordinate[0],coordinate[2],coordinate[1]]
-#            i += 1
-#            print line[:-1]
-#            if i > 10: break
     print "That took {0} seconds.".format(str(time.time() - start_time))
+    return tropos
 
 ##### MAIN #####
 species = 'go3'  # the species data will be retrieved from is GEMS Ozone (from MACC Reanalysis)
-build_data(species, 320, 73, 60, 28)
+tropo_go3 = build_data(species, 320, 73, 60, 28)
 

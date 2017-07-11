@@ -62,7 +62,7 @@ def calc_qq(uu, vv, dx, dy, cosphi):
     return qq
 
 
-def bin_coords(PV_array, timestep):
+def bin_coords(to_bin_array, timestep):
     '''
     bins coords based on if they are stratospheric or tropospheric relative to 
     if PV value is > 2
@@ -73,7 +73,7 @@ def bin_coords(PV_array, timestep):
     global ni, nj, nk_mom, strato_file, tropo_file
     start_time = time.time()
     # reverses the levels so k will go from bottom to top (1000 - 0.1)
-    PV_array = PV_array[::-1]
+    PV_array = to_bin_array[::-1]
 
     # initializes lists
     strato_coords   = []
@@ -92,13 +92,14 @@ def bin_coords(PV_array, timestep):
     for i in xrange(ni):
         for j in xrange(nj):
             for k in xrange(nk_mom):
-                if PV[k,i,j] > 2:
+                if PV_array[k,i,j] > 2:
                     # if you wish to use a numpy solution (much faster), uncomment these two
                     #tropo_coords[:k,i,j] = 1
                     #strato_coords[k:,i,j] = 1
                     tropo_coords    += [(z, i, j) for z in xrange(k)]
                     strato_coords   += [(z, i, j) for z in xrange(k,nk_mom)]
                     break
+
     # conducts writing to file
     print 'WRITING BINNED INDEX POSITIONS'
     for coord in tropo_coords:
@@ -110,7 +111,6 @@ def bin_coords(PV_array, timestep):
     tropo.close()
 
     print "Binning time: {0}".format(str(time.time() - start_time))
-    #return strato_coords, tropo_coords
 
 
 def build_fst(params):
@@ -324,12 +324,12 @@ for filename in filenames:
     lnsp_file = pyg.open(lnsp_files[0])
 
     # all instances of '[:4]' are to limit to 4 timesteps, or 1 day (in this case 01012012)
-    uu = nc.u.get()[:28,:,::-1]
-    vv = nc.v.get()[:28,:,::-1]
-    qq = nc.vo.get()[:28,:,::-1]
-    th = nc.t.get()[:28,:,::-1]
+    uu = nc.u.get()[:,:,::-1]
+    vv = nc.v.get()[:,:,::-1]
+    qq = nc.vo.get()[:,:,::-1]
+    th = nc.t.get()[:,:,::-1]
     pressures = get_pressures(lnsp_file, 0)
-    pressures = pressures[:28,:,:len(uu[0,0])]
+    pressures = pressures[:,:,:len(uu[0,0])]
     pressures = pressures[:,:,::-1]
 
     uu.setflags(write=True)
@@ -501,11 +501,10 @@ for filename in filenames:
         PV      = ((-g0 * (dt/dp) * tempq) + term1 - term2) * 1e6
 
         PV  = np.transpose(PV, (0,2,1))
-        PV  = shift_lon(PV)
         bin_coords(PV,t)
+        PV  = shift_lon(PV)
         PV  = vert_interp(pressures[t], PV)
         zonal_mean = get_zonal_mean(PV)  # change PV depending on which you choose to use
-
         pv_list.append(PV)
         zon_list.append(zonal_mean)
         

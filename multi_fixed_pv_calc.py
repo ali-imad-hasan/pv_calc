@@ -111,7 +111,7 @@ def bin_coords(to_bin_array, timestep):
     print "Binning time: {0}".format(str(time.time() - start_time))
 
 
-def build_fst(params):
+def build_fst(params, y_int, m_int):
     '''
     (dict) -> (int, dict)
     builds the file as per the parameters defined in the params dict
@@ -124,7 +124,7 @@ def build_fst(params):
     temp = '' 
     for x in day: temp += str(x)
     #new_nc = '/home/ords/aq/alh002/pyscripts/workdir/pv_files/TEST5.fst'
-    new_nc = '/home/ords/aq/alh002/pyscripts/workdir/pv_files/POTVOR_file_{0}.fst'.format(temp)
+    new_nc = '/home/ords/aq/alh002/pyscripts/workdir/pv_files/POTVOR_file_{0}_{1}.fst'.format(y_int + 2008, m_int+1)
     tmp = open(new_nc, 'w+'); tmp.close()
     output_file = new_nc
 
@@ -454,7 +454,7 @@ for year_int, filename in enumerate(filenames):
         tempu = np.zeros((nj, ni))
 
         # builds the fst file as per the params in params0
-        file_id, MACC_grid = build_fst(params0)
+        file_id, MACC_grid = build_fst(params0, year_int, m_int)
 
         # gets the grid descriptors for later use with definition of data records
         tic_record, tac_record = get_grid_descriptors(file_id)

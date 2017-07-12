@@ -48,19 +48,21 @@ def monthly_mean_data(array):
     levels with no tropospheric gridpoints are nan
     '''
     
-    timesteps,nk,ni,nj = len(array), len(array[0]), len(array[0,0,0]), 73
+    timesteps, nk, ni, nj = array.shape
 
-    # these will hold data of mean for timesteps that are nonzero
+    # these will hold number of indices of timesteps that are nonzero
     ind_t = np.zeros((nk,ni,nj))
     ind_s = np.zeros((nk,ni,nj))
+    mm_tropo = np.zeros((nk,ni,nj))
 
     for i in xrange(ni):
         for j in xrange(nj):
             for k in xrange(nk):
-                # nonzero returns a 2-tuple of (list of arrays,datyp) of all values not 0
-                ind_t[k,i,j] = array[:,k,i,j].nonzero()[0].mean()
+                # nonzero returns a 2-tuple of (list of arrays,datyp) of all indices of values not 0
+                ind_t[k,i,j]    = len(array[:,k,i,j].nonzero()[0])  # number of nonzero values
+                mm_tropo[k,i,j] = array[:,k,i,j].sum() / ind_t[k,i,j]  # gets the mean of nonzero values
 
-    return ind_t
+    return mm_tropo
     
 
 ##### MAIN #####

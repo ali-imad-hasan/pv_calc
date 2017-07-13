@@ -26,6 +26,53 @@ lnsp_files = ["/home/ords/aq/alh002/NCDF/LNSP/2008.nc",
 #lnsp_files = [lnsp_files[0]]  # this is temporary, just to work with one file
 
 ##### FXN #####
+def build_data(data, coord_list):
+    '''
+    builds data for the species identified based on binned coordinates
+
+    ni: number of lon grid points
+    nj: number of lat grid points
+    species: species you wish to build the data for
+    '''
+    global const_pressure, ni, nj
+
+    print "GETTING GO3 FROM BINS"
+    start_time = time.time()
+    nk = len(const_pressure)
+    tropos = np.zeros((nk, ni, nj))
+
+    for tuple_coord in coord_list:
+        coordinate = [int(x) for x in tuple_coord]  # creates a list with 3 ints [nk,ni,nj]
+        for ind in coordinate:
+            tropos[coordinate[0], coordinate[1], coordinate[2]] = data[coordinate[0], coordinate[1], coordinate[2]]
+    print "That took {0} seconds.".format(str(time.time() - start_time))
+    return tropos
+
+
+def monthly_mean_data(array):
+    '''
+    gets monthly mean of the troposphere GO3
+    levels with no tropospheric gridpoints are nan
+    '''
+    
+    print "GETTING MONTHLY MEAN"
+    timesteps, nk, ni, nj = array.shape
+
+    # these will hold number of indices of timesteps that are nonzero
+    ind_t = np.zeros((nk,ni,nj))
+    ind_s = np.zeros((nk,ni,nj))
+    mm_tropo = np.zeros((nk,ni,nj))
+
+    for i in xrange(ni):
+        for j in xrange(nj):
+            for k in xrange(nk):
+                # nonzero returns a 2-tuple of (list of arrays,datyp) of all indices of values not 0
+                ind_t[k,i,j]    = len(array[:,k,i,j].nonzero()[0])  # number of nonzero values
+                mm_tropo[k,i,j] = array[:,k,i,j].sum() / ind_t[k,i,j]  # gets the mean of nonzero values
+
+    return mm_tropo
+
+
 def calc_qq(uu, vv, dx, dy, cosphi):
     '''
     calculates qq from u component of wind, v component of wind, dx, dy, and cosphi.
@@ -68,7 +115,7 @@ def bin_coords(to_bin_array, timestep):
     writes the index coords in the form nk,ni,nj (comma seperated) in its respective file
     depending on if it's stratospheric or tropospheric
     '''
-    global ni, nj, nk_mom, strato_file, tropo_file
+    global ni, nj, nk_mom, strato_file, tropo_file, const_pressure
     start_time = time.time()
     # reverses the levels so k will go from bottom to top (1000 - 0.1)
     PV_array = to_bin_array[::-1]
@@ -82,14 +129,14 @@ def bin_coords(to_bin_array, timestep):
     #tropo_coords    = np.zeros((nk_mom,ni,nj))
 
     # creates file
-    strato  = open(strato_file,'w')
-    tropo   = open(tropo_file, 'w')
-    strato.write("TIMESTEP,{0}\n".format(timestep))
-    tropo.write("TIMESTEP,{0}\n".format(timestep))
+#    strato  = open(strato_file,'w')
+#    tropo   = open(tropo_file, 'w')
+#    strato.write("TIMESTEP,{0}\n".format(timestep))
+#    tropo.write("TIMESTEP,{0}\n".format(timestep))
 
     for i in xrange(ni):
         for j in xrange(nj):
-            for k in xrange(nk_mom):
+            for k in xrange(len(const_pressure)):
                 if PV_array[k,i,j] > 2:
                     # if you wish to use a numpy solution (much faster), uncomment these two
                     #tropo_coords[:k,i,j] = 1
@@ -98,6 +145,8 @@ def bin_coords(to_bin_array, timestep):
                     strato_coords   += [(z, i, j) for z in xrange(k,nk_mom)]
                     break
 
+    print "Binning time: {0}".format(str(time.time() - start_time))
+    return strato_coords, tropo_coords
     # conducts writing to file
     print 'WRITING BINNED INDEX POSITIONS'
     for coord in tropo_coords:
@@ -393,6 +442,14 @@ for year_int, filename in enumerate(filenames):
         nk_thm = nk_mom
         qq2 = np.zeros((nk_mom, nj, ni))
 
+        # reads nc file to retrieve data.
+        # you may need to call splice_month in pv_calc.py if you're not dealing with january.
+        species_data = pyg.open('/home/ords/aq/alh002/NCDF/SPECIES/GO3/2009.nc')
+        species_data = splice_month(species_data.go3, m_int)
+        # flips levels so it's compatible with the data in tropo file
+        species_data = species_data[:,:,:len(uu[0,0])]
+        species_data = species_data[:,:,::-1]
+        tropo_go3 = np.zeros((len(uu), len(const_pressure), ni, nj))
         # stuff on level k - 1
         uulast = np.zeros([nj, ni])
         vvlast = np.zeros([nj, ni])
@@ -466,8 +523,8 @@ for year_int, filename in enumerate(filenames):
                 th[o,k] = th[o,k] * thet1 ** kappa
 
         # holds all the bin lists for each timestep
-        #strato_timed_bin_list   = np.zeros((len(uu), nk_mom, ni, nj))
-        #tropo_timed_bin_list    = np.zeros((len(uu), nk_mom, ni, nj))
+        strato_timed_bin_list   = np.zeros((nk_mom, ni, nj))
+        tropo_timed_bin_list    = np.zeros((nk_mom, ni, nj))
         start_time = time.time()
         for t in xrange(len(uu)):
         #for t in xrange(1):
@@ -540,19 +597,26 @@ for year_int, filename in enumerate(filenames):
             
             # these exist on half levels -0.5 of the original level
             PV      = ((-g0 * (dt/dp) * tempq) + term1 - term2) * 1e6
+            
             PV  = np.transpose(PV, (0,2,1))
-            bin_coords(PV,t)
             PV  = shift_lon(PV)
             PV  = vert_interp(pressures[t], PV)
+            go3 = vert_interp(pressures[t], np.transpose(species_data[t], (0,2,1)))
+            go3 = go3[::-1]
+            strato_timed_bin_list, tropo_timed_bin_list = bin_coords(PV, t)
+            tropo_go3[t] = build_data(go3, tropo_timed_bin_list)
+
             zonal_mean = get_zonal_mean(PV)  # change PV depending on which you choose to use
             pv_list.append(PV)
             zon_list.append(zonal_mean)
             
+        # BOOKMARK: MONTHLY MEAN
+        mm_tropo_go3 = monthly_mean_data(tropo_go3)
+
         # BOOKMARK: FSTFILE #
-        
+        exit()
         ## this portion of the code simply opens a new file and ports PV onto it
         print "Total time taken: {0}".format(str(time.time() - start_time))
-        exit()
         l += 1
         for t, array in enumerate(pv_list):
             try:

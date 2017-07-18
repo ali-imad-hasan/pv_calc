@@ -63,7 +63,7 @@ def monthly_mean_data(array):
                 mm_tropo[k,i,j] = array[:,k,i,j].sum() / ind_t[k,i,j]  # gets the mean of nonzero values
 
     return mm_tropo
-    
+
 
 ##### MAIN #####
 

@@ -400,6 +400,7 @@ month_list = ['01JAN','02FEB', '03MAR',
 for year_int, filename in enumerate(filenames):
     pv_list  = []
     zon_list = []
+    to3_list = []
     nc = pyg.open(filename)
     lnsp_file = pyg.open(lnsp_files[year_int])
     for m_int, month in enumerate(month_list):
@@ -612,9 +613,10 @@ for year_int, filename in enumerate(filenames):
             
         # BOOKMARK: MONTHLY MEAN
         mm_tropo_go3 = monthly_mean_data(tropo_go3)
-
+        mm_tropo_go3 = np.nan_to_num(mm_tropo_go3)
+        to3_list.append(mm_tropo_go3[::-1])
         # BOOKMARK: FSTFILE #
-        exit()
+        #exit()
         ## this portion of the code simply opens a new file and ports PV onto it
         print "Total time taken: {0}".format(str(time.time() - start_time))
         l += 1
@@ -662,6 +664,18 @@ for year_int, filename in enumerate(filenames):
                     print "Defined a zonal mean record with dimensions ({0}, {1})".format(new_record['ni'], new_record['nj'])       
                     
                     rmn.fstecr(file_id, zonal_record)  # write the dictionary record to the file as a new record
+
+                    tropo_binned = to3_list[t]
+                    tmp = tropo_binned[rp1]
+                    tmp = np.asfortranarray(tmp)
+                    tropo_binned_record = new_record
+                    tropo_binned_record.update({
+                        'nomvar': 'TGO3',
+                        'd'     : tmp.astype(np.float32)
+                        })
+                    print "Defined a tropo_binned mean record with dimensions ({0}, {1})".format(new_record['ni'], new_record['nj'])       
+                    
+                    rmn.fstecr(file_id, tropo_binned_record)  # write the dictionary record to the file as a new record
             except:
                 rmn.fstfrm(file_id)
                 rmn.fclos(file_id)

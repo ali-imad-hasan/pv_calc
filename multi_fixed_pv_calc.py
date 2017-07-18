@@ -40,13 +40,18 @@ def build_data(data, coord_list):
     start_time = time.time()
     nk = len(const_pressure)
     tropos = np.zeros((nk, ni, nj))
+    strato = np.zeros((nk, ni, nj))
 
-    for tuple_coord in coord_list:
+    for tuple_coord in coord_list[0]:
         coordinate = [int(x) for x in tuple_coord]  # creates a list with 3 ints [nk,ni,nj]
         for ind in coordinate:
             tropos[coordinate[0], coordinate[1], coordinate[2]] = data[coordinate[0], coordinate[1], coordinate[2]]
+    for tuple_coord in coord_list[1]:
+        coordinate = [int(x) for x in tuple_coord]  # creates a list with 3 ints [nk,ni,nj]
+        for ind in coordinate:
+            strato[coordinate[0], coordinate[1], coordinate[2]] = data[coordinate[0], coordinate[1], coordinate[2]]
     print "That took {0} seconds.".format(str(time.time() - start_time))
-    return tropos
+    return tropos, strato
 
 
 def monthly_mean_data(array):
@@ -119,6 +124,7 @@ def bin_coords(to_bin_array, timestep):
     start_time = time.time()
     # reverses the levels so k will go from bottom to top (1000 - 0.1)
     PV_array = to_bin_array[::-1]
+    nk = len(const_pressure)
 
     # initializes lists
     strato_coords   = []
@@ -142,7 +148,7 @@ def bin_coords(to_bin_array, timestep):
                     #tropo_coords[:k,i,j] = 1
                     #strato_coords[k:,i,j] = 1
                     tropo_coords    += [(z, i, j) for z in xrange(k)]
-                    strato_coords   += [(z, i, j) for z in xrange(k,nk_mom)]
+                    strato_coords   += [(z, i, j) for z in xrange(k,nk)]
                     break
 
     print "Binning time: {0}".format(str(time.time() - start_time))
@@ -401,6 +407,7 @@ for year_int, filename in enumerate(filenames):
     pv_list  = []
     zon_list = []
     to3_list = []
+    so3_list = []
     nc = pyg.open(filename)
     lnsp_file = pyg.open(lnsp_files[year_int])
     for m_int, month in enumerate(month_list):
@@ -451,6 +458,7 @@ for year_int, filename in enumerate(filenames):
         species_data = species_data[:,:,:len(uu[0,0])]
         species_data = species_data[:,:,::-1]
         tropo_go3 = np.zeros((len(uu), len(const_pressure), ni, nj))
+        strato_go3 = np.zeros((len(uu), len(const_pressure), ni, nj))
         # stuff on level k - 1
         uulast = np.zeros([nj, ni])
         vvlast = np.zeros([nj, ni])
@@ -605,7 +613,8 @@ for year_int, filename in enumerate(filenames):
             go3 = vert_interp(pressures[t], np.transpose(species_data[t], (0,2,1)))
             go3 = go3[::-1]
             strato_timed_bin_list, tropo_timed_bin_list = bin_coords(PV, t)
-            tropo_go3[t] = build_data(go3, tropo_timed_bin_list)
+            strato_tropo = [tropo_timed_bin_list, strato_timed_bin_list]
+            tropo_go3[t], strato_go3[t] = build_data(go3, strato_tropo)
 
             zonal_mean = get_zonal_mean(PV)  # change PV depending on which you choose to use
             pv_list.append(PV)
@@ -615,6 +624,9 @@ for year_int, filename in enumerate(filenames):
         mm_tropo_go3 = monthly_mean_data(tropo_go3)
         mm_tropo_go3 = np.nan_to_num(mm_tropo_go3)
         to3_list.append(mm_tropo_go3[::-1])
+        mm_strato_go3 = monthly_mean_data(strato_go3)
+        mm_strato_go3 = np.nan_to_num(mm_strato_go3)
+        so3_list.append(mm_strato_go3[::-1])
         # BOOKMARK: FSTFILE #
         #exit()
         ## this portion of the code simply opens a new file and ports PV onto it
@@ -664,6 +676,18 @@ for year_int, filename in enumerate(filenames):
                     print "Defined a zonal mean record with dimensions ({0}, {1})".format(new_record['ni'], new_record['nj'])       
                     
                     rmn.fstecr(file_id, zonal_record)  # write the dictionary record to the file as a new record
+
+                    strato_binned = so3_list[t]
+                    tmp = strato_binned[rp1]
+                    tmp = np.asfortranarray(tmp)
+                    strato_binned_record = new_record
+                    strato_binned_record.update({
+                        'nomvar': 'SGO3',
+                        'd'     : tmp.astype(np.float32)
+                        })
+                    print "Defined a strato_binned mean record with dimensions ({0}, {1})".format(new_record['ni'], new_record['nj'])       
+                    
+                    rmn.fstecr(file_id, strato_binned_record)  # write the dictionary record to the file as a new record
 
                     tropo_binned = to3_list[t]
                     tmp = tropo_binned[rp1]

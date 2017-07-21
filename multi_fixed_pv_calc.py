@@ -17,7 +17,8 @@ kappa   = 0.287514
 dlatlon = 1.125
 l       = 0             # used to name files
 #filename = '/home/ords/aq/alh002/pyscripts/workdir/momentum_test.fst'
-filenames  = glob.glob('/home/ords/aq/alh002/NCDF/MOMFILES/*.nc'); filenames.sort()
+filenames = glob.glob('/home/ords/aq/alh002/NCDF/MOMFILES/*.nc'); filenames.sort()
+#filenames = ['/home/ords/aq/alh002/NCDF/MOMFILES/testmom.nc']
 lnsp_files = ["/home/ords/aq/alh002/NCDF/LNSP/2008.nc", 
               "/home/ords/aq/alh002/NCDF/LNSP/2009.nc", 
               "/home/ords/aq/alh002/NCDF/LNSP/2010.nc", 
@@ -42,14 +43,41 @@ def build_data(data, coord_list):
     tropos = np.zeros((nk, ni, nj))
     strato = np.zeros((nk, ni, nj))
 
-    for tuple_coord in coord_list[0]:
-        coordinate = [int(x) for x in tuple_coord]  # creates a list with 3 ints [nk,ni,nj]
-        for ind in coordinate:
-            tropos[coordinate[0], coordinate[1], coordinate[2]] = data[coordinate[0], coordinate[1], coordinate[2]]
-    for tuple_coord in coord_list[1]:
-        coordinate = [int(x) for x in tuple_coord]  # creates a list with 3 ints [nk,ni,nj]
-        for ind in coordinate:
-            strato[coordinate[0], coordinate[1], coordinate[2]] = data[coordinate[0], coordinate[1], coordinate[2]]
+#    for tuple_coord in coord_list[0]:
+#        coordinate = [int(x) for x in tuple_coord]  # creates a list with 3 ints [nk,ni,nj]
+#        for ind in coordinate:
+#            tropos[coordinate[0], coordinate[1], coordinate[2]] = data[coordinate[0], coordinate[1], coordinate[2]]
+
+    for i in xrange(ni):
+        for j in xrange(nj):
+            for k in xrange(nk):
+                if coord_list[k,i,j] == 0:
+                    strato[k,i,j] = data[k,i,j]
+                elif coord_list[k,i,j] == 1:
+                    tropos[k,i,j] = data[k,i,j]
+
+    strato = np.nan_to_num(strato)
+    tropos = np.nan_to_num(tropos)
+
+    print "FILLING ZEROS"
+    for i in xrange(ni):
+        for j in xrange(nj):
+            for k in xrange(nk):
+                if tropos[k,i,j] == 0:
+                    tropos[k:,i,j] = tropos[k-1, i, j]
+                    break
+
+    for i in xrange(ni):
+        for j in xrange(nj):
+            for k in xrange(nk - 1, -1, -1):  # goes through levels backwards
+                if strato[k,i,j] == 0:
+                    strato[:k+1,i,j] = strato[k+1, i, j]
+                    break
+
+#    for tuple_coord in coord_list[1]:
+#        coordinate = [int(x) for x in tuple_coord]  # creates a list with 3 ints [nk,ni,nj]
+#        for ind in coordinate:
+#            strato[coordinate[0], coordinate[1], coordinate[2]] = data[coordinate[0], coordinate[1], coordinate[2]]
     print "That took {0} seconds.".format(str(time.time() - start_time))
     return tropos, strato
 
@@ -132,7 +160,7 @@ def bin_coords(to_bin_array, timestep):
 
     # if you wish to use a numpy solution (much faster), uncomment these two
     #strato_coords   = np.zeros((nk_mom,ni,nj))
-    #tropo_coords    = np.zeros((nk_mom,ni,nj))
+    tropo_coords    = np.zeros((nk_mom,ni,nj))
 
     # creates file
 #    strato  = open(strato_file,'w')
@@ -142,17 +170,30 @@ def bin_coords(to_bin_array, timestep):
 
     for i in xrange(ni):
         for j in xrange(nj):
-            for k in xrange(len(const_pressure)):
-                if PV_array[k,i,j] > 2:
+            # limits to 610 hPa in const_pressure
+            #for k in xrange(nk - const_pressure.index(610), nk - const_pressure.index(100)):
+            for k in xrange(17, nk):
+                if PV_array[k,i,j] > 2.0:
                     # if you wish to use a numpy solution (much faster), uncomment these two
-                    #tropo_coords[:k,i,j] = 1
+                    tropo_coords[:k,i,j] = 1
                     #strato_coords[k:,i,j] = 1
-                    tropo_coords    += [(z, i, j) for z in xrange(k)]
-                    strato_coords   += [(z, i, j) for z in xrange(k,nk)]
+                    #tropo_coords    += [(z, i, j) for z in xrange(k)]
+                    #strato_coords   += [(z, i, j) for z in xrange(k, nk)]
                     break
+    # fills bottom tropo boundary (pressure > 610)
+#    for i in xrange(ni):
+#        for j in xrange(nj):
+    tropo_coords[:17, :, :] = 1
+#            tropo_coords[(nk - const_pressure.index(100)):] = 0
+            #tropo_coords    += [(z, i, j) for z in xrange(nk - const_pressure.index(610))]
+            #strato_coords   += [(z, i, j) for z in xrange(nk - const_pressure.index(100), nk)]
+            
+            # fills top (pressure < 100 hPa) strato boundary
 
     print "Binning time: {0}".format(str(time.time() - start_time))
-    return strato_coords, tropo_coords
+    return tropo_coords#, strato_coords
+
+    # none of this runs as the return statement stops it 
     # conducts writing to file
     print 'WRITING BINNED INDEX POSITIONS'
     for coord in tropo_coords:
@@ -179,7 +220,7 @@ def build_fst(params, y_int, m_int):
     temp = '' 
     for x in day: temp += str(x)
     #new_nc = '/home/ords/aq/alh002/pyscripts/workdir/pv_files/TEST5.fst'
-    new_nc = '/home/ords/aq/alh002/pyscripts/workdir/pv_files/POTVOR_file_{0}_{1}.fst'.format(y_int + 2008, m_int+1)
+    new_nc = '/home/ords/aq/alh002/pyscripts/workdir/pv_files/SHIFTED_POTVOR_file_{0}_{1}.fst'.format(y_int + 2008, m_int+1)
     tmp = open(new_nc, 'w+'); tmp.close()
     output_file = new_nc
 
@@ -272,35 +313,6 @@ def vert_interp(pressure, org):
     return y_interp
 
 
-def splice_month(open_var, m_int):
-    '''
-    takes an open var, splices out the timesteps that dont regard
-    to that month (with m_int)
-    '''
-
-    if len(open_var.time) == 1464:
-        leap_year = True
-    elif len(open_var.time) == 1460:
-        leap_year = False
-    else:
-        print("File must contain all 4 time values for each day of the year")
-        exit()
-    
-    if leap_year:
-        stored_array = [
-                        open_var[:124], open_var[124:240], open_var[240:364], open_var[364:484],
-                        open_var[484:608], open_var[608:728], open_var[728:852], open_var[852:976],
-                        open_var[976:1096], open_var[1096:1220], open_var[1220:1340], open_var[1340:]
-                        ]
-    else:
-        stored_array = [
-                        open_var[:124], open_var[124:236], open_var[236:360], open_var[360:480],
-                        open_var[480:604], open_var[604:724], open_var[724:848], open_var[848:972],
-                        open_var[972:1092], open_var[1092:1216], open_var[1216:1336], open_var[1336:]
-                        ]
-    return stored_array[m_int]
-
-
 def build_hhmmss(timestep):
     '''
     calculates seconds from timestep
@@ -319,6 +331,7 @@ def build_hhmmss(timestep):
     
     print 'TIMEINT: {0}'.format(str(time_int))
     return time_int
+
 
 def get_pressures(open_nc, m_int):
     '''
@@ -383,18 +396,56 @@ def splice_month(open_var, m_int):
         exit()
     
     if leap_year:
-        stored_array = [
-                        open_var[:124], open_var[124:240], open_var[240:364], open_var[364:484],
-                        open_var[484:608], open_var[608:728], open_var[728:852], open_var[852:976],
-                        open_var[976:1096], open_var[1096:1220], open_var[1220:1340], open_var[1340:]
-                        ]
+        if m_int == 0:
+            return open_var[:124]
+        elif m_int == 1:
+            return open_var[124:240]
+        elif m_int == 2:
+            return open_var[240:364]
+        elif m_int == 3:
+            return open_var[364:484]
+        elif m_int == 4:
+            return open_var[484:608]
+        elif m_int == 5:
+            return open_var[608:728]
+        elif m_int == 6:
+            return open_var[728:852]
+        elif m_int == 7:
+            return open_var[852:976]
+        elif m_int == 8:
+            return open_var[976:1096]
+        elif m_int == 9:
+            return open_var[1096:1220]
+        elif m_int == 10:
+            return open_var[1220:1340]
+        elif m_int == 11:
+            return open_var[1340:]
+
     else:
-        stored_array = [
-                        open_var[:124], open_var[124:236], open_var[236:360], open_var[360:480],
-                        open_var[480:604], open_var[604:724], open_var[724:848], open_var[848:972],
-                        open_var[972:1092], open_var[1092:1216], open_var[1216:1336], open_var[1336:]
-                        ]
-    return stored_array[m_int]
+        if m_int == 0:
+            return open_var[:124]
+        elif m_int == 1:
+            return open_var[124:236]
+        elif m_int == 2:
+            return open_var[236:360]
+        elif m_int == 3:
+            return open_var[360:480]
+        elif m_int == 4:
+            return open_var[480:604]
+        elif m_int == 5:
+            return open_var[604:724]
+        elif m_int == 6:
+            return open_var[724:848]
+        elif m_int == 7:
+            return open_var[848:972]
+        elif m_int == 8:
+            return open_var[972:1092]
+        elif m_int == 9:
+            return open_var[1092:1216]
+        elif m_int == 10:
+            return open_var[1216:1336]
+        elif m_int == 11:
+            return open_var[1336:]
 
 
 ##### MAIN #####
@@ -404,18 +455,24 @@ month_list = ['01JAN','02FEB', '03MAR',
               '10OCT', '11NOV', '12DEC']
 # this portion of the code handles parsing values from the nc file
 for year_int, filename in enumerate(filenames):
-    pv_list  = []
-    zon_list = []
     to3_list = []
     so3_list = []
+    go3_list = []
     nc = pyg.open(filename)
     lnsp_file = pyg.open(lnsp_files[year_int])
     for m_int, month in enumerate(month_list):
+        if m_int < 3 or m_int > 5:
+            continue
         date_tuple = (year_int, month)
         strato_file = '/home/ords/aq/alh002/pyscripts/workdir/pv_files/strato_coords_{0}_{1}.txt'.format(year_int, month)
         tropo_file = '/home/ords/aq/alh002/pyscripts/workdir/pv_files/tropo_coords_{0}_{1}.txt'.format(year_int, month)
 
         # all instances of '[:4]' are to limit to 4 timesteps, or 1 day (in this case 01012012)
+#        uu = nc.u
+#        vv = nc.v
+#        qq = nc.vo
+#        th = nc.t
+
         uu = splice_month(nc.u, m_int)
         vv = splice_month(nc.v, m_int)
         qq = splice_month(nc.vo, m_int)
@@ -449,11 +506,14 @@ for year_int, filename in enumerate(filenames):
         nk_mom = len(pressures[0])#len(const_pressure)
         nk_thm = nk_mom
         qq2 = np.zeros((nk_mom, nj, ni))
+        pv_list  = np.zeros((len(uu) + 1, len(const_pressure), ni, nj))
+        zon_list = np.zeros((len(uu) + 1, len(const_pressure), ni, nj))
 
         # reads nc file to retrieve data.
         # you may need to call splice_month in pv_calc.py if you're not dealing with january.
         species_data = pyg.open('/home/ords/aq/alh002/NCDF/SPECIES/GO3/2009.nc')
         species_data = splice_month(species_data.go3, m_int)
+        #species_data = species_data.go3[:1]
         # flips levels so it's compatible with the data in tropo file
         species_data = species_data[:,:,:len(uu[0,0])]
         species_data = species_data[:,:,::-1]
@@ -497,7 +557,7 @@ for year_int, filename in enumerate(filenames):
             print "Setting dy..."
             for j in xrange(1, nj-1):
                 dy[j,:] = a * (lat[j+1] - lat[j-1]) * np.pi/360.
-            dy[0,:] = a * (lat[1] - lat[0]) * np.pi/180.  # bottom level init. NOTE: why do we not divide by 2 here?
+            dy[0,:] = a * (lat[1] - lat[0]) * np.pi/180.  # bottom level init. 
             dy[-1,:] = a * (lat[-1] - lat[-2]) * np.pi/180.  # top level init
         except:
             print j
@@ -539,8 +599,8 @@ for year_int, filename in enumerate(filenames):
         #for t in xrange(1):
             # Potential vorticity field
             PV          = np.zeros([nk_mom, nj, ni])
-            pres_levs   = np.zeros(PV.shape)  # really lazy
-            dp          = np.zeros(PV.shape)  # really lazy
+            pres_levs   = np.zeros(PV.shape)
+            dp          = np.zeros(PV.shape)
 
             pres_levs   = pressures[t]
             surf_pres   = pres_levs[-1]
@@ -612,14 +672,15 @@ for year_int, filename in enumerate(filenames):
             PV  = vert_interp(pressures[t], PV)
             go3 = vert_interp(pressures[t], np.transpose(species_data[t], (0,2,1)))
             go3 = go3[::-1]
-            strato_timed_bin_list, tropo_timed_bin_list = bin_coords(PV, t)
+            #strato_timed_bin_list, tropo_timed_bin_list = bin_coords(PV, t)
+            tropo_timed_bin_list = bin_coords(PV, t)
             strato_tropo = [tropo_timed_bin_list, strato_timed_bin_list]
-            tropo_go3[t], strato_go3[t] = build_data(go3, strato_tropo)
+            tropo_go3[t], strato_go3[t] = build_data(go3, tropo_timed_bin_list)
 
             zonal_mean = get_zonal_mean(PV)  # change PV depending on which you choose to use
-            pv_list.append(PV)
-            zon_list.append(zonal_mean)
-            
+            pv_list[t] = PV
+            zon_list[t] = zonal_mean
+
         # BOOKMARK: MONTHLY MEAN
         mm_tropo_go3 = monthly_mean_data(tropo_go3)
         mm_tropo_go3 = np.nan_to_num(mm_tropo_go3)
@@ -627,6 +688,11 @@ for year_int, filename in enumerate(filenames):
         mm_strato_go3 = monthly_mean_data(strato_go3)
         mm_strato_go3 = np.nan_to_num(mm_strato_go3)
         so3_list.append(mm_strato_go3[::-1])
+        mm_go3 = monthly_mean_data(species_data[::-1])
+        mm_go3 = np.transpose(mm_go3, (0,2,1))
+        go3_list.append(mm_go3)
+        pv_list[-1] = monthly_mean_data(pv_list[:-1])
+        zon_list[-1] = monthly_mean_data(zon_list[:-1])
         # BOOKMARK: FSTFILE #
         #exit()
         ## this portion of the code simply opens a new file and ports PV onto it
@@ -636,7 +702,10 @@ for year_int, filename in enumerate(filenames):
             try:
                 # copies the default record
                 new_record = rmn.FST_RDE_META_DEFAULT.copy() 
-                time_int = build_hhmmss(t)
+                if t < 124:
+                    time_int = build_hhmmss(t)
+                    new_record.update({'dateo' : rmn.newdate(rmn.NEWDATE_PRINT2STAMP,
+                                       20120100 + int(math.floor(t/4+1)), time_int)})
                 for rp1 in xrange(len(const_pressure)):  # writes a record for every level (as a different ip1)
                     # converts rp1 into a ip1 with pressure kind
                     ip1 = rmn.convertIp(rmn.CONVIP_ENCODE, const_pressure[rp1], rmn.KIND_PRESSURE)
@@ -652,7 +721,6 @@ for year_int, filename in enumerate(filenames):
                         'ig2'   : tic_record['ip2'],
                         'ig3'   : tic_record['ip3'],
                         'ig4'   : tic_record['ig4'],
-                        'dateo' : rmn.newdate(rmn.NEWDATE_PRINT2STAMP,20120100 + int(math.floor(t/4+1)), time_int),
                         'deet'  : int(86400/4),  # timestep in secs
                         'ip1'   : ip1
                         })
@@ -676,35 +744,66 @@ for year_int, filename in enumerate(filenames):
                     print "Defined a zonal mean record with dimensions ({0}, {1})".format(new_record['ni'], new_record['nj'])       
                     
                     rmn.fstecr(file_id, zonal_record)  # write the dictionary record to the file as a new record
-
-                    strato_binned = so3_list[t]
-                    tmp = strato_binned[rp1]
-                    tmp = np.asfortranarray(tmp)
-                    strato_binned_record = new_record
-                    strato_binned_record.update({
-                        'nomvar': 'SGO3',
-                        'd'     : tmp.astype(np.float32)
-                        })
-                    print "Defined a strato_binned mean record with dimensions ({0}, {1})".format(new_record['ni'], new_record['nj'])       
-                    
-                    rmn.fstecr(file_id, strato_binned_record)  # write the dictionary record to the file as a new record
-
-                    tropo_binned = to3_list[t]
-                    tmp = tropo_binned[rp1]
-                    tmp = np.asfortranarray(tmp)
-                    tropo_binned_record = new_record
-                    tropo_binned_record.update({
-                        'nomvar': 'TGO3',
-                        'd'     : tmp.astype(np.float32)
-                        })
-                    print "Defined a tropo_binned mean record with dimensions ({0}, {1})".format(new_record['ni'], new_record['nj'])       
-                    
-                    rmn.fstecr(file_id, tropo_binned_record)  # write the dictionary record to the file as a new record
             except:
                 rmn.fstfrm(file_id)
                 rmn.fclos(file_id)
                 raise
 
+        for t in xrange(len(so3_list)):
+            new_record = rmn.FST_RDE_META_DEFAULT.copy() 
+            for rp1 in xrange(len(const_pressure)):  # writes a record for every level (as a different ip1)
+                # converts rp1 into a ip1 with pressure kind
+                ip1 = rmn.convertIp(rmn.CONVIP_ENCODE, const_pressure[rp1], rmn.KIND_PRESSURE)
+                new_record.update(MACC_grid)
+                new_record.update({  # Update with specific meta
+                    'nomvar': 'PV',
+                    'typvar': 'C', 
+                    'etiket': 'MACCRean',
+                    'ip2'   : t,
+                    'ni'    : MACC_grid['ni'],
+                    'nj'    : MACC_grid['nj'],
+                    'ig1'   : tic_record['ip1'],
+                    'ig2'   : tic_record['ip2'],
+                    'ig3'   : tic_record['ip3'],
+                    'ig4'   : tic_record['ig4'],
+                    'deet'  : int(86400/4),  # timestep in secs
+                    'ip1'   : ip1
+                    })
+                strato_binned = so3_list[t]
+                tmp = strato_binned[rp1]
+                tmp = np.asfortranarray(tmp)
+                strato_binned_record = new_record
+                strato_binned_record.update({
+                    'nomvar': 'SGO3',
+                    'd'     : tmp.astype(np.float32)
+                    })
+                print "Defined a strato_binned mean record with dimensions ({0}, {1})".format(new_record['ni'], new_record['nj'])       
+                
+                rmn.fstecr(file_id, strato_binned_record)  # write the dictionary record to the file as a new record
+
+                go3_array = go3_list[t]
+                tmp = go3_array[rp1]
+                tmp = np.asfortranarray(tmp)
+                go3_array_record = new_record
+                go3_array_record.update({
+                    'nomvar': 'GO3',
+                    'd'     : tmp.astype(np.float32)
+                    })
+                print "Defined a go3_array mean record with dimensions ({0}, {1})".format(new_record['ni'], new_record['nj'])       
+                
+                rmn.fstecr(file_id, go3_array_record)  # write the dictionary record to the file as a new record
+
+                tropo_binned = to3_list[t]
+                tmp = tropo_binned[rp1]
+                tmp = np.asfortranarray(tmp)
+                tropo_binned_record = new_record
+                tropo_binned_record.update({
+                    'nomvar': 'TGO3',
+                    'd'     : tmp.astype(np.float32)
+                    })
+                print "Defined a tropo_binned mean record with dimensions ({0}, {1})".format(new_record['ni'], new_record['nj'])       
+                
+                rmn.fstecr(file_id, tropo_binned_record)  # write the dictionary record to the file as a new record
         rmn.fstfrm(file_id)
         rmn.fclos(file_id)
 
